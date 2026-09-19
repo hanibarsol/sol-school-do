@@ -1286,7 +1286,7 @@
      key is held and a chime says when to let go. Here the fill lasts one whole
      beat at the chosen tempo, because one beat is what a quarter note means. */
   var HOLD_TOL = 0.90;
-  var HOLD_FRACTION = 0.70;   /* of one beat — a quarter is played, not leaned on */
+  var HOLD_FRACTION = 0.75;   /* of one beat — a quarter is played, not leaned on */
   var hold = null, heldTone = null, keyFillEl = null, targetKeyEl = null;
   var playIdx = 0;      /* which note in the row the piano is waiting for */
 
@@ -1431,8 +1431,8 @@
     audio();
     if(playIdx >= noteEls.length){ playIdx = 0; }
     var b = beatsOf(placed[playIdx]);
-    /* a quarter is played short; a long note is genuinely held for its length */
-    var need = b === 1 ? bpmMs * HOLD_FRACTION : bpmMs * b * 0.9;
+    /* every value is held for the same share of its length: 0.75 of a quarter, 0.75 of a whole */
+    var need = bpmMs * b * HOLD_FRACTION;   /* every value is held for 0.75 of its length */
     hold = {t0:Date.now(), need:need, el:noteEls[playIdx], full:false, raf:0};
     startTone(NOTES[LESSON].freq);
     tickHold();
