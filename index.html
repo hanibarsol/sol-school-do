@@ -303,7 +303,7 @@
   #guideLines{display:none;}
   #lineNums text{
     font-family:"Fredoka","Heebo",sans-serif;font-weight:600;
-    font-size:86px;fill:var(--purple);
+    font-size:86px;fill:var(--teal);
     text-anchor:middle;dominant-baseline:central;
     opacity:0;transform:scale(.45);
     transform-box:fill-box;transform-origin:center;
@@ -425,6 +425,7 @@
   #app[data-mode="game"] #btnSong,
   #app[data-mode="game"] #btnVideo,
   #app[data-mode="game"] #btnReveal,
+  #app[data-mode="game"] #btnClear,
   #app[data-mode="game"] #btnClick,
   #app[data-mode="game"] #btnPiano,
   #app[data-mode="game"] #btnDraw,
@@ -505,6 +506,7 @@
   #app[data-mode="draw"] #btnSong,
   #app[data-mode="draw"] #btnVideo,
   #app[data-mode="draw"] #btnReveal,
+  #app[data-mode="draw"] #btnClear,
   #app[data-mode="draw"] #btnClick,
   #app[data-mode="draw"] #btnPiano,
   #app[data-mode="draw"] #btnDraw,
@@ -673,6 +675,14 @@
   .pill.dim{background:var(--chrome);color:var(--text-soft);}
   .pill.dim:hover{background:#E3EAF0;}
   /* running right now — press to stop */
+  #btnClear{display:none;}
+  #app:not([data-step="0"]) #btnClear{display:inline-flex;}
+  /* a note picked out for deleting */
+  .note.selected .rim{stroke:var(--blue);stroke-width:16;stroke-dasharray:22 12;}
+  .delbadge{cursor:pointer;}
+  .delbadge circle{fill:var(--red);stroke:var(--white);stroke-width:5;}
+  .delbadge line{stroke:var(--white);stroke-width:8;stroke-linecap:round;}
+  .note:not(.plain):not(.trace){cursor:pointer;}
   .pill.done{background:rgba(67,34,90,.24);color:var(--purple);}
   .pill.done:hover{background:var(--blue);color:var(--white);}
   #btnSong.done,#btnVideo.done{background:rgba(242,164,18,.34);color:var(--ink);}
@@ -738,6 +748,17 @@
   #screen .frame.sized{width:auto;aspect-ratio:auto;}
   .frame-tools{position:absolute;top:.7rem;right:.7rem;z-index:2;display:flex;gap:.5rem;}
   #screen video{width:100%;height:100%;display:block;}
+  /* a play button big enough to hit from across the room */
+  #bigPlay{
+    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;
+    width:clamp(90px,16vh,150px);height:clamp(90px,16vh,150px);
+    border:none;border-radius:50%;cursor:pointer;
+    background:var(--amber);box-shadow:0 10px 30px rgba(0,0,0,.45);
+    display:grid;place-items:center;
+  }
+  #bigPlay svg{width:46%;height:46%;margin-left:9%;fill:var(--ink);}   /* a play triangle sits optically right of centre, whatever the page direction */
+  #bigPlay:hover{background:var(--white);}
+  #bigPlay[hidden]{display:none;}
   #screen .placeholder{
     width:100%;height:100%;
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.9rem;
@@ -913,8 +934,9 @@
       </svg>
       שִׁיר פְּתִיחָה
     </button>
-    <button id="btnVideo" class="pill">▶ בּוֹאוּ נִצְפֶּה</button>
+    <button id="btnVideo" class="pill">▶ מִי בָּא לְבַקֵּר?</button>
     <button id="btnReveal" class="pill">מִי הַתָּו הֶחָדָשׁ?</button>
+    <button id="btnClear" class="pill dim">מְחִיקַת כָּל הַתָּוִים</button>
     <button id="btnClick" class="pill">קְלִיקֶר</button>
     <button id="btnPiano" class="pill">הַתָּו בַּפְּסַנְתֵּר</button>
     <button id="btnDraw" class="pill">עַכְשָׁו מְצַיְּרִים</button>
@@ -943,7 +965,7 @@
       <button data-bpm="600"  aria-pressed="false">מָהִיר</button>
     </div>
     <button id="btnNewClass" type="button">כִּתָּה חֲדָשָׁה</button>
-    <p class="keys-legend">קִצּוּרֵי דֶּרֶךְ: <kbd>←</kbd> עוֹד תָּו · <kbd>→</kbd> לְהָסִיר · <kbd>רֶוַח</kbd> קְלִיקֶר · <kbd>↓</kbd> פְּסַנְתֵּר · <kbd>G</kbd> מִילָּה טוֹבָה</p>
+    <p class="keys-legend">קִצּוּרֵי דֶּרֶךְ: <kbd>←</kbd> הוֹסָפַת הַתָּו · <kbd>→</kbd> לְהָסִיר · <kbd>רֶוַח</kbd> קְלִיקֶר · <kbd>↓</kbd> פְּסַנְתֵּר · <kbd>G</kbd> מִילָּה טוֹבָה</p>
   </footer>
 
   <div id="screen" role="dialog" aria-modal="true" aria-label="הַסִּרְטוֹן">
@@ -1522,10 +1544,11 @@
     noteEls.push(g);
     void g.getBBox();
     requestAnimationFrame(function(){ g.classList.add("on"); });
-    /* heard at its real length: a whole note rings for four beats, not one */
-    tone(NOTES[key].freq, Math.min(4.2, beatsOf({dur:DUR}) * bpmMs / 1000 * 0.94));
+    /* the first note is heard as it arrives, at its real length; the notes added
+       after it stay silent, and the row is heard when the clicker plays it */
+    if(i === 0){ tone(NOTES[key].freq, Math.min(4.2, beatsOf({dur:DUR}) * bpmMs / 1000 * 0.94)); }
     headline.textContent = NOTES[key].he;
-    btnReveal.textContent = "עוֹד תָּו";
+    btnReveal.textContent = "הוֹסָפַת הַתָּו";
     markDone("btnReveal");
     saveState();
     setStep(1);
@@ -1533,7 +1556,89 @@
     if(app.dataset.piano === "1"){ drawWire(); }
   }
 
+  /* ---------------- choosing a note and deleting it ---------------- */
+  var selIdx = -1;
+
+  function clearSelection(){
+    noteEls.forEach(function(el){
+      el.classList.remove("selected");
+      var b = el.querySelector(".delbadge");
+      if(b){ b.parentNode.removeChild(b); }
+    });
+    selIdx = -1;
+  }
+
+  function selectNote(i){
+    var again = !!(noteEls[i] && noteEls[i].classList.contains("selected"));
+    clearSelection();
+    if(again || i < 0){ return; }          /* a second press lets go of it */
+    var el = noteEls[i];
+    if(!el){ return; }
+    selIdx = i;
+    el.classList.add("selected");
+    var r = R * (el.dataset.dur === "whole" ? WHOLE_SCALE : 1);
+    /* top left of the head, clear of a stem that rises on the right */
+    var badge = svg("g", {"class":"delbadge", transform:"translate(" + (-r * 0.8) + "," + (-r * 0.8) + ")"});
+    badge.appendChild(svg("circle", {r:34}));
+    badge.appendChild(svg("line", {x1:-12, y1:-12, x2:12, y2:12}));
+    badge.appendChild(svg("line", {x1:12, y1:-12, x2:-12, y2:12}));
+    el.querySelector(".pulse").appendChild(badge);
+  }
+
+  /* after any deletion: close the gaps, and put the lesson back in order */
+  function afterNotesChanged(){
+    noteEls.forEach(function(el, i){
+      el.setAttribute("transform", "translate(" + xs[i] + "," + STEP_Y[el.dataset.note] + ")");
+    });
+    if(!placed.length){
+      closePiano();
+      headline.textContent = "מִי מַגִּיעַ לַחֲמֵשָׁה?";
+      btnReveal.textContent = "מִי הַתָּו הֶחָדָשׁ?";
+      setStep(0);
+    }
+    resetRun();
+    if(app.dataset.piano === "1"){ drawWire(); }
+    saveState();
+  }
+
+  function deleteNote(i){
+    if(i < 0 || i >= noteEls.length){ return; }
+    stopClicker();
+    clearSelection();
+    var g = noteEls.splice(i, 1)[0];
+    placed.splice(i, 1);
+    if(g && g.parentNode){ g.parentNode.removeChild(g); }
+    afterNotesChanged();
+  }
+
+  function clearAllNotes(){
+    stopClicker();
+    clearSelection();
+    gNotes.innerHTML = "";
+    noteEls = [];
+    while(placed.length){ placed.pop(); }
+    afterNotesChanged();
+  }
+
+  document.getElementById("btnClear").addEventListener("click", clearAllNotes);
+
+  /* one listener for every note on the staff, in the ordinary lesson only */
+  gNotes.addEventListener("pointerdown", function(e){
+    if(inGame() || inDraw()){ return; }
+    var badge = e.target.closest ? e.target.closest(".delbadge") : null;
+    if(badge){
+      e.preventDefault(); e.stopPropagation();
+      deleteNote(noteEls.indexOf(badge.closest(".note")));
+      return;
+    }
+    var note = e.target.closest ? e.target.closest(".note") : null;
+    if(!note || note.classList.contains("plain") || note.classList.contains("trace")){ return; }
+    e.preventDefault();
+    selectNote(noteEls.indexOf(note));
+  });
+
   function removeNote(){
+    clearSelection();
     if(!placed.length){ return; }
     placed.pop();
     var g = noteEls.pop();
@@ -1863,6 +1968,11 @@
   });
 
   document.addEventListener("keydown", function(e){
+    if((e.key === "Delete" || e.key === "Backspace") && selIdx >= 0 && !inGame() && !inDraw()){
+      e.preventDefault();
+      deleteNote(selIdx);
+      return;
+    }
     if(e.key === "Escape"){
       if(nameBox.classList.contains("open")){ closeNameBox(); }
       else if(hudEl.classList.contains("open")){ hudEl.classList.remove("open"); }
@@ -1977,7 +2087,22 @@
         vid.addEventListener("ended", function(){ setTimeout(closeScreen, 600); });
       }
       screenBody.appendChild(vid);
-      vid.play().catch(function(){});
+      if(group === "song"){
+        /* the song and the demonstration start only when she presses play */
+        vid.preload = "auto";                  /* so the first frame is showing */
+        var big = document.createElement("button");
+        big.id = "bigPlay";
+        big.type = "button";
+        big.setAttribute("aria-label", "הַפְעָלָה");
+        big.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5 L20 12 L6 20.5 Z"></path></svg>';
+        big.addEventListener("click", function(){ vid.play().catch(function(){}); });
+        vid.addEventListener("play",  function(){ big.hidden = true; });
+        vid.addEventListener("pause", function(){ big.hidden = false; });
+        vid.addEventListener("ended", function(){ big.hidden = false; });
+        screenBody.appendChild(big);
+      } else {
+        vid.play().catch(function(){});
+      }
     } else {
       var p = document.createElement("div");
       p.className = "placeholder";
@@ -3220,7 +3345,7 @@
       });
       if(placed.length){
         headline.textContent = NOTES[placed[0].key].he;
-        btnReveal.textContent = "עוֹד תָּו";
+        btnReveal.textContent = "הוֹסָפַת הַתָּו";
         setStep(1);
       }
       resetRun();
