@@ -1286,7 +1286,7 @@
      key is held and a chime says when to let go. Here the fill lasts one whole
      beat at the chosen tempo, because one beat is what a quarter note means. */
   var HOLD_TOL = 0.90;
-  var HOLD_FRACTION = 0.75;   /* of one beat — a quarter is played, not leaned on */
+  var HOLD_FRACTION = 0.75;   /* how much of its value a note sounds, everywhere: piano, clicker, landing, games */
   var hold = null, heldTone = null, keyFillEl = null, targetKeyEl = null;
   var playIdx = 0;      /* which note in the row the piano is waiting for */
 
@@ -1546,7 +1546,7 @@
     requestAnimationFrame(function(){ g.classList.add("on"); });
     /* the first note is heard as it arrives, at its real length; the notes added
        after it stay silent, and the row is heard when the clicker plays it */
-    if(i === 0){ tone(NOTES[key].freq, Math.min(4.2, beatsOf({dur:DUR}) * bpmMs / 1000 * 0.94)); }
+    if(i === 0){ tone(NOTES[key].freq, Math.min(4.2, beatsOf({dur:DUR}) * bpmMs / 1000 * HOLD_FRACTION)); }
     headline.textContent = NOTES[key].he;
     btnReveal.textContent = "הוֹסָפַת הַתָּו";
     markDone("btnReveal");
@@ -1710,7 +1710,7 @@
               b * bpmMs);
       tick(beat === 0);
       /* the click and the note sound together, for as long as the note lasts */
-      if(placed[beat]){ tone(NOTES[placed[beat].key].freq, Math.min(3.6, b * bpmMs / 1000 * 0.94)); }
+      if(placed[beat]){ tone(NOTES[placed[beat].key].freq, Math.min(3.6, b * bpmMs / 1000 * HOLD_FRACTION)); }
     };
     var run = function(){
       beat = -1;
@@ -3159,7 +3159,7 @@
     g.classList.add("open", "right", "blink");
     /* the proof is in the ear: four beats really do last four times as long */
     var beats = isWhole ? 4 : 1;
-    tone(NOTES[LESSON].freq, Math.min(3.6, beats * bpmMs / 1000 * 0.94));
+    tone(NOTES[LESSON].freq, Math.min(3.6, beats * bpmMs / 1000 * HOLD_FRACTION));
     headline.textContent = isWhole
       ? "זֶה שָׁלֵם — אַרְבַּע פְּעִימוֹת"
       : "זֶה רֶבַע — פְּעִימָה אַחַת";
