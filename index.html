@@ -1638,9 +1638,9 @@
     noteEls.push(g);
     void g.getBBox();
     requestAnimationFrame(function(){ g.classList.add("on"); });
-    /* the first note is heard as it arrives, at its real length; the notes added
-       after it stay silent, and the row is heard when the clicker plays it */
-    if(i === 0 && !silent){ tone(NOTES[key].freq, Math.min(4.2, beatsOf({dur:v}) * bpmMs / 1000 * HOLD_FRACTION)); }
+    /* every note is heard as it arrives, at its real length. Only a note written
+       from the piano stays quiet here, because it was just heard under the finger */
+    if(!silent){ tone(NOTES[key].freq, Math.min(4.2, beatsOf({dur:v}) * bpmMs / 1000 * HOLD_FRACTION)); }
     headline.textContent = NOTES[key].he;
     btnReveal.textContent = "הוֹסָפַת הַתָּו";
     markDone("btnReveal");
