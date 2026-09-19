@@ -566,6 +566,15 @@
     padding:0 clamp(.8rem,3vw,3rem);
   }
   #app[data-piano="1"] #piano{max-height:46vh;}
+  .kbmode{display:flex;gap:.3rem;background:var(--chrome);border-radius:999px;padding:.25rem;}
+  .kbmode button{
+    font-family:"Fredoka","Heebo",sans-serif;font-weight:600;
+    font-size:clamp(.8rem,1.3vw,1.05rem);
+    padding:.35em 1em;background:transparent;color:var(--text-soft);
+    border:none;border-radius:999px;cursor:pointer;transition:background .16s ease;
+  }
+  .kbmode button:hover{background:#E3EAF0;color:var(--text);}
+  .kbmode button[aria-pressed="true"]{background:var(--teal);color:var(--white);}
   .kb-head{
     display:flex;align-items:center;justify-content:center;
     gap:.9rem;flex-wrap:wrap;margin-bottom:.5rem;
@@ -920,6 +929,10 @@
 
   <section id="piano" aria-label="הַפְּסַנְתֵּר">
     <div class="kb-head">
+      <div class="kbmode" role="group" aria-label="מַה הַפְּסַנְתֵּר עוֹשֶׂה">
+        <button type="button" data-pm="write" aria-pressed="true">כִּתְבוּ עַל הַחֲמֵשָׁה</button>
+        <button type="button" data-pm="play" aria-pressed="false">נַגְּנוּ אֶת הַשּׁוּרָה</button>
+      </div>
       <p class="kb-tip" id="kbTip"></p>
       <button id="btnAgain" type="button">לְנַגֵּן שׁוּב</button>
     </div>
@@ -1256,29 +1269,61 @@
     o.connect(g); g.connect(master);
     o.start(t); o.stop(t + 0.08);
   }
-  function tone(freq, dur){
-    dur = dur || 1.4;
+  function pianoVoice(freq){
     var c = audio(), t = c.currentTime;
-    var g = c.createGain();
-    var peak = 0.95;
-    var rel = Math.min(0.32, dur * 0.28);        /* the let-go at the very end */
-    var body = Math.max(0.03, dur - rel);
-    /* attack, then hold nearly level for the whole length, then release.
-       Four beats now genuinely sound four times as long as one. */
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(peak, t + 0.012);
-    g.gain.setValueAtTime(peak, t + 0.012);
-    g.gain.linearRampToValueAtTime(peak * 0.78, t + body);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    g.connect(master);
-    [[1,1],[2,0.42],[3,0.2],[4,0.1]].forEach(function(h){
-      var o = c.createOscillator(), hg = c.createGain();
-      o.type = "triangle";
-      o.frequency.value = freq * h[0];
-      hg.gain.value = h[1];
-      o.connect(hg); hg.connect(g);
-      o.start(t); o.stop(t + dur + 0.1);
+    var PARTS = [1, .55, .3, .17, .1, .06];
+    var out = c.createGain();
+    out.connect(master);
+    out.gain.setValueAtTime(0.0001, t);
+    out.gain.exponentialRampToValueAtTime(1.7, t + 0.006);   /* loud on purpose: a noisy room */
+
+    var lp = c.createBiquadFilter();
+    lp.type = "lowpass"; lp.Q.value = 0.5;
+    lp.frequency.setValueAtTime(5200, t);
+    lp.frequency.exponentialRampToValueAtTime(1900, t + 1.6);
+    lp.connect(out);
+
+    var oscs = [];
+    PARTS.forEach(function(a, i){
+      var k = i + 1;
+      var g = c.createGain();
+      g.gain.setValueAtTime(a, t);
+      g.gain.setTargetAtTime(0, t + 0.01, 1 / (0.32 + 0.9 * (k - 1)));   /* higher partials fade first */
+      g.connect(lp);
+      var o = c.createOscillator();
+      o.type = "sine";
+      o.frequency.value = freq * k * Math.sqrt(1 + 0.0004 * k * k);   /* strings run slightly sharp up high */
+      o.connect(g);
+      o.start(t);
+      oscs.push(o);
     });
+
+    /* the hammer: a very short felt thud at the front of the note */
+    var src = c.createBufferSource(); src.buffer = noiseBuf;
+    var bp = c.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 2400; bp.Q.value = 0.8;
+    var hg = c.createGain();
+    hg.gain.setValueAtTime(0.35, t);
+    hg.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
+    src.connect(bp); bp.connect(hg); hg.connect(out);
+    src.start(t); src.stop(t + 0.04);
+
+    return {
+      stop: function(){
+        var s = c.currentTime;
+        try{
+          out.gain.cancelScheduledValues(s);
+          out.gain.setValueAtTime(Math.max(out.gain.value, 0.0001), s);
+          out.gain.setTargetAtTime(0, s, 0.07);
+        }catch(err){}
+        oscs.forEach(function(o){ try{ o.stop(s + 0.5); }catch(err){} });
+      }
+    };
+  }
+
+  /* a note of a set length: clicker, landing, games, the other keys */
+  function tone(freq, dur){
+    var v = pianoVoice(freq);
+    setTimeout(v.stop, (dur || 1.4) * 1000);
   }
 
   /* ---------------- holding a note for exactly one beat ----------------
@@ -1315,7 +1360,7 @@
   }
 
   function markNext(){
-    var on = app.dataset.piano === "1" && noteEls.length > 1;
+    var on = app.dataset.piano === "1" && noteEls.length > 1 && pianoMode === "play";
     noteEls.forEach(function(el, i){ el.classList.toggle("next", on && i === playIdx); });
   }
   var runDone = false;
@@ -1324,6 +1369,11 @@
     var tip = document.getElementById("kbTip");
     var again = document.getElementById("btnAgain");
     if(!tip){ return; }
+    if(pianoMode === "write"){
+      tip.textContent = "לַחֲצוּ עַל " + NOTES[LESSON].he + ": קָצָר — רֶבַע · עַד הַצְּלִיל הַשֵּׁנִי — שָׁלֵם";
+      again.classList.remove("show");
+      return;
+    }
     if(runDone){
       tip.textContent = "סִיַּמְתֶּם אֶת כָּל הַשּׁוּרָה";
       again.classList.add("show");
@@ -1345,31 +1395,12 @@
   }
 
   function startTone(freq){
-    var c = audio(), t = c.currentTime;
-    var g = c.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.9, t + 0.012);
-    g.connect(master);
-    var oscs = [[1,1],[2,0.42],[3,0.2],[4,0.1]].map(function(hh){
-      var o = c.createOscillator(), hg = c.createGain();
-      o.type = "triangle";
-      o.frequency.value = freq * hh[0];
-      hg.gain.value = hh[1];
-      o.connect(hg); hg.connect(g); o.start(t);
-      return o;
-    });
-    heldTone = {g:g, oscs:oscs};
+    heldTone = pianoVoice(freq);
   }
 
   function stopTone(){
     if(!heldTone){ return; }
-    var c = audio(), t = c.currentTime;
-    try{
-      heldTone.g.gain.cancelScheduledValues(t);
-      heldTone.g.gain.setValueAtTime(Math.max(heldTone.g.gain.value, 0.0001), t);
-      heldTone.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
-    }catch(err){}
-    heldTone.oscs.forEach(function(o){ try{ o.stop(t + 0.3); }catch(err){} });
+    heldTone.stop();
     heldTone = null;
   }
 
@@ -1420,8 +1451,68 @@
     })();
   }
 
+  var pianoMode = "write";    /* "write": the piano writes onto the staff. "play": it plays the row */
+
+  /* a second, brighter chime: held this far, it is a whole */
+  function chimeWhole(){
+    var c = audio(), t = c.currentTime;
+    [2093, 2637].forEach(function(fq, k){
+      var o = c.createOscillator(), g = c.createGain(), t0 = t + k * 0.12;
+      o.type = "sine";
+      o.frequency.value = fq;
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.8, t0 + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.4);
+      o.connect(g); g.connect(master);
+      o.start(t0); o.stop(t0 + 0.45);
+    });
+  }
+
+  function startWrite(){
+    if(placed.length >= maxSlots){ flash("הַחֲמֵשָׁה מְלֵאָה"); return; }
+    audio();
+    hold = {write:true, t0:Date.now(), raf:0, qDone:false, wDone:false,
+            qNeed: bpmMs * HOLD_FRACTION,         /* a quarter, at the one length the page uses */
+            wNeed: bpmMs * 4 * HOLD_FRACTION};    /* and a whole */
+    startTone(NOTES[LESSON].freq);
+    tickWrite();
+  }
+
+  function tickWrite(){
+    if(!hold || !hold.write){ return; }
+    var t = Date.now() - hold.t0;
+    if(keyFillEl){ keyFillEl.style.height = (Math.min(1, t / hold.wNeed) * 100).toFixed(1) + "%"; }
+    var tip = document.getElementById("kbTip");
+    /* the quarter point is marked in words only: a chime here lands in the middle of
+       holding a whole, and on a laptop speaker it sounds like something broke */
+    if(t >= hold.qNeed && !hold.qDone){ hold.qDone = true; tip.textContent = "רֶבַע"; }
+    if(t >= hold.wNeed && !hold.wDone){ hold.wDone = true; chimeWhole(); tip.textContent = "שָׁלֵם"; }
+    hold.raf = requestAnimationFrame(tickWrite);
+  }
+
+  function endWrite(){
+    var e = hold; hold = null;
+    cancelAnimationFrame(e.raf);
+    stopTone();
+    if(keyFillEl){ keyFillEl.style.height = "0%"; }
+    addNote(e.wDone ? "whole" : "quarter", true);   /* already heard it, no second sound */
+    paintKbTip();
+  }
+
+  function setPianoMode(m){
+    if(hold){ endHold(); }
+    pianoMode = m;
+    Array.prototype.forEach.call(document.querySelectorAll(".kbmode button"), function(b){
+      b.setAttribute("aria-pressed", b.dataset.pm === m ? "true" : "false");
+    });
+    resetRun();
+    drawWire();
+    saveState();
+  }
+
   function startHold(){
     if(hold){ return; }
+    if(pianoMode === "write"){ startWrite(); return; }
     if(!noteEls.length){ tone(NOTES[LESSON].freq, 0.9); return; }
     if(runDone){
       /* the line is finished; the key still answers, it just does not restart */
@@ -1453,6 +1544,7 @@
 
   function endHold(){
     if(!hold){ return; }
+    if(hold.write){ endWrite(); return; }
     var e = hold; hold = null;
     cancelAnimationFrame(e.raf);
     stopTone();
@@ -1535,18 +1627,20 @@
   }
 
   /* each press puts the next note down, left to right, the way music is read */
-  function addNote(){
+  function addNote(value, silent){
+    /* a button click passes an event here, so only a string counts as a value */
+    var v = (typeof value === "string") ? value : DUR;
     if(placed.length >= maxSlots){ flash("הַחֲמֵשָׁה מְלֵאָה"); return; }
     var key = LESSON, i = placed.length;
-    placed.push({key:key, dur:DUR});
-    var g = buildNote(key, xs[i], DUR);
+    placed.push({key:key, dur:v});
+    var g = buildNote(key, xs[i], v);
     gNotes.appendChild(g);
     noteEls.push(g);
     void g.getBBox();
     requestAnimationFrame(function(){ g.classList.add("on"); });
     /* the first note is heard as it arrives, at its real length; the notes added
        after it stay silent, and the row is heard when the clicker plays it */
-    if(i === 0){ tone(NOTES[key].freq, Math.min(4.2, beatsOf({dur:DUR}) * bpmMs / 1000 * HOLD_FRACTION)); }
+    if(i === 0 && !silent){ tone(NOTES[key].freq, Math.min(4.2, beatsOf({dur:v}) * bpmMs / 1000 * HOLD_FRACTION)); }
     headline.textContent = NOTES[key].he;
     btnReveal.textContent = "הוֹסָפַת הַתָּו";
     markDone("btnReveal");
@@ -1870,7 +1964,7 @@
   function drawWire(){
     var target = kb.querySelector(".wkey.target");
     /* nothing is waiting once the row is finished, so nothing is pointed at */
-    var head = (!runDone && playIdx < noteEls.length) ? noteEls[playIdx] : null;
+    var head = (pianoMode === "play" && !runDone && playIdx < noteEls.length) ? noteEls[playIdx] : null;
     var path = wire.querySelector("path");
     if(!target || !head || app.dataset.piano !== "1"){
       wire.classList.remove("draw");
@@ -3192,6 +3286,9 @@
     nextRound();
   }
 
+  Array.prototype.forEach.call(document.querySelectorAll(".kbmode button"), function(b){
+    b.addEventListener("click", function(){ setPianoMode(b.dataset.pm); });
+  });
   document.getElementById("btnAgain").addEventListener("click", function(){
     resetRun();
     drawWire();
@@ -3294,6 +3391,7 @@
           done: done,
           value: DUR,
           group: groupMode,
+          pmode: pianoMode,
           bpm: bpmMs,
           star: !!(targetKeyEl && targetKeyEl.classList.contains("earned"))
         }));
@@ -3321,6 +3419,12 @@
       var gb = document.getElementById("btnGroup");
       gb.classList.add("live");
       gb.classList.remove("dim");
+    }
+    if(s.pmode === "play" || s.pmode === "write"){
+      pianoMode = s.pmode;
+      Array.prototype.forEach.call(document.querySelectorAll(".kbmode button"), function(b){
+        b.setAttribute("aria-pressed", b.dataset.pm === pianoMode ? "true" : "false");
+      });
     }
     if(s.value){ DUR = s.value; }
     Array.prototype.forEach.call(document.querySelectorAll("#value button"), function(b){
