@@ -308,6 +308,9 @@
     opacity:0;transform:scale(.45);
     transform-box:fill-box;transform-origin:center;
     transition:opacity .25s ease, transform .38s cubic-bezier(.2,1.6,.4,1);
+  
+    /* sits on its line, not behind it: a white edge keeps the line out of the digit */
+    paint-order:stroke;stroke:var(--white);stroke-width:18;stroke-linejoin:round;
   }
   #lineNums text.on{opacity:1;transform:none;}
   #guideLines line{
@@ -904,7 +907,6 @@
       </defs>
 
       <g id="guideLines"></g>
-      <g id="lineNums"></g>
       <g id="lines"></g>
       <line id="barline"></line>
       <g id="clefDrawing">
@@ -914,6 +916,7 @@
       <g id="clefWrap" clip-path="url(#clefClip)">
         <image id="clefImg" x="0" y="0" width="1920" height="1080"></image>
       </g>
+      <g id="lineNums"></g>
       <g id="notes"></g>
       <g id="peek"></g>
       <g id="marker" aria-hidden="true">
@@ -1234,7 +1237,17 @@
       master = ac.createGain();
       master.gain.value = 3.4;
       master.connect(comp);
-      comp.connect(ac.destination);
+      var pre = ac.createGain();
+      pre.gain.value = 0.5;
+      var round = ac.createWaveShaper();
+      var curve = new Float32Array(2048);
+      for(var q = 0; q < curve.length; q++){
+        var x = (q / (curve.length - 1)) * 2 - 1;
+        curve[q] = Math.tanh(2 * x);        /* straight for normal levels, bending only near the top */
+      }
+      round.curve = curve;
+      round.oversample = "4x";
+      comp.connect(pre); pre.connect(round); round.connect(ac.destination);
 
       var len = Math.floor(ac.sampleRate * 0.05);
       noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
@@ -1271,41 +1284,31 @@
   }
   function pianoVoice(freq){
     var c = audio(), t = c.currentTime;
-    var PARTS = [1, .55, .3, .17, .1, .06];
+    /* an electric piano: one sine bent by another, the bend fading fast.
+       warm and bell-like, and it stays pleasant over many repetitions. */
     var out = c.createGain();
     out.connect(master);
     out.gain.setValueAtTime(0.0001, t);
-    out.gain.exponentialRampToValueAtTime(1.7, t + 0.006);   /* loud on purpose: a noisy room */
+    out.gain.exponentialRampToValueAtTime(1.9, t + 0.015);   /* loud on purpose: a noisy room */
+    out.gain.setTargetAtTime(0.0001, t + 0.02, 1.5);         /* it fades by itself, like a struck tine */
+
+    var car = c.createOscillator(), mod = c.createOscillator(), idx = c.createGain();
+    car.type = "sine"; mod.type = "sine";
+    car.frequency.value = freq;
+    mod.frequency.value = freq;
+    idx.gain.setValueAtTime(freq * 1.1, t);
+    idx.gain.setTargetAtTime(freq * 0.12, t, 0.35);          /* the bell lives only at the front of the note */
+    mod.connect(idx);
+    idx.connect(car.frequency);
 
     var lp = c.createBiquadFilter();
-    lp.type = "lowpass"; lp.Q.value = 0.5;
-    lp.frequency.setValueAtTime(5200, t);
-    lp.frequency.exponentialRampToValueAtTime(1900, t + 1.6);
+    lp.type = "lowpass"; lp.frequency.value = 2600; lp.Q.value = 0.4;
+    car.connect(lp);
     lp.connect(out);
 
-    var oscs = [];
-    PARTS.forEach(function(a, i){
-      var k = i + 1;
-      var g = c.createGain();
-      g.gain.setValueAtTime(a, t);
-      g.gain.setTargetAtTime(0, t + 0.01, 1 / (0.32 + 0.9 * (k - 1)));   /* higher partials fade first */
-      g.connect(lp);
-      var o = c.createOscillator();
-      o.type = "sine";
-      o.frequency.value = freq * k * Math.sqrt(1 + 0.0004 * k * k);   /* strings run slightly sharp up high */
-      o.connect(g);
-      o.start(t);
-      oscs.push(o);
-    });
+    car.start(t); mod.start(t);
+    var oscs = [car, mod];
 
-    /* the hammer: a very short felt thud at the front of the note */
-    var src = c.createBufferSource(); src.buffer = noiseBuf;
-    var bp = c.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 2400; bp.Q.value = 0.8;
-    var hg = c.createGain();
-    hg.gain.setValueAtTime(0.35, t);
-    hg.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
-    src.connect(bp); bp.connect(hg); hg.connect(out);
-    src.start(t); src.stop(t + 0.04);
 
     return {
       stop: function(){
