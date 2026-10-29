@@ -426,6 +426,8 @@
   }
 
   #btnG1,#btnG2,#btnG3,#btnG4,#btnFreeze,#btnSend,#btnNext,#btnGameExit,#btnGroup{display:none;}
+  #app[data-mode="game"] #btnStory,
+  #app[data-mode="draw"] #btnStory,
   #app[data-mode="game"] #btnSong,
   #app[data-mode="game"] #btnVideo,
   #app[data-mode="game"] #btnReveal,
@@ -742,14 +744,19 @@
   .note:not(.plain):not(.trace){cursor:pointer;}
   .pill.done{background:rgba(67,34,90,.24);color:var(--purple);}
   .pill.done:hover{background:var(--blue);color:var(--white);}
-  #btnSong.done,#btnVideo.done{background:rgba(242,164,18,.34);color:var(--ink);}
-  #btnSong.done:hover,#btnVideo.done:hover{background:var(--purple);color:var(--white);}
+  #btnSong.done,#btnVideo.done,#btnStory.done{background:rgba(242,164,18,.34);color:var(--ink);}
+  #btnSong.done:hover,#btnVideo.done:hover,#btnStory.done:hover{background:var(--purple);color:var(--white);}
   /* whatever is running right now still outranks whatever is finished */
   .pill.live{background:var(--red);color:var(--white);box-shadow:none;}
   /* the opening video is where the hand goes first */
   /* amber means: something is about to play on the screen */
-  #btnSong,#btnVideo{background:var(--amber);color:var(--ink);}
-  #btnSong:hover,#btnVideo:hover{background:var(--purple);color:var(--white);}
+  #btnSong,#btnVideo,#btnStory{background:var(--amber);color:var(--ink);}
+  /* a little screen with a play triangle on it: this one is for watching */
+  .watch{width:1.15em; height:1.15em; flex:0 0 auto;}
+  .watch rect{fill:none; stroke:currentColor; stroke-width:2;}
+  .watch path{fill:currentColor;}
+  .watch line{stroke:currentColor; stroke-width:2; stroke-linecap:round;}
+  #btnSong:hover,#btnVideo:hover,#btnStory:hover{background:var(--purple);color:var(--white);}
   /* a real quarter note, drawn — the same shape they meet on the staff */
   .qnote{width:.8em;height:1.15em;flex:0 0 auto;}
   .qnote line{stroke:currentColor;stroke-width:3;stroke-linecap:round;}
@@ -1015,6 +1022,14 @@
       שִׁיר פְּתִיחָה
     </button>
     <button id="btnVideo" class="pill">▶ מִי בָּא לְבַקֵּר?</button>
+    <button id="btnStory" class="pill">
+      <svg class="watch" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="2.2" y="4" width="19.6" height="13.4" rx="2.6"></rect>
+        <path d="M10 9.3 L15 12 L10 14.7 Z"></path>
+        <line x1="8" y1="20.4" x2="16" y2="20.4"></line>
+      </svg>
+      הַסּוֹד הַגָּדוֹל
+    </button>
     <button id="btnReveal" class="pill">מִי הַתָּו הֶחָדָשׁ?</button>
     <button id="btnClear" class="pill dim">מְחִיקַת כָּל הַתָּוִים</button>
     <button id="btnClick" class="pill">קְלִיקֶר</button>
@@ -1179,6 +1194,11 @@
     ],
     note: [
       {name:"דּוֹ מַגִּיעַ", src:"media/note.mp4"}
+    ],
+    /* where the family comes from. Seven and a half minutes, and upright,
+       because that is how it was filmed. */
+    story: [
+      {name:"הַסּוֹד הַגָּדוֹל", src:"media/story.mp4"}
     ]
   };
   var MAXN   = 8;      /* most notes one staff will hold */
@@ -1263,7 +1283,7 @@
     if(b && !b.classList.contains("done")){ b.classList.add("done"); saveState(); }
   }
   function clearDone(){
-    ["btnSong","btnVideo","btnReveal","btnClick","btnPiano","btnDraw","btnPlay"]
+    ["btnSong","btnVideo","btnStory","btnReveal","btnClick","btnPiano","btnDraw","btnPlay"]
       .forEach(function(id){
         var b = document.getElementById(id);
         if(b){ b.classList.remove("done"); }
@@ -2320,7 +2340,7 @@
   function openScreen(kind, idx){
     group = FILMS[kind] ? kind : "note";
     pick = idx || 0;
-    var opener = "btn" + (group === "song" ? "Song" : "Video");
+    var opener = "btn" + (group === "song" ? "Song" : group === "story" ? "Story" : "Video");
     document.getElementById(opener).classList.remove("hint");   /* it has done its job */
     markDone(opener);
     stopClicker();
@@ -2432,6 +2452,7 @@
   }
 
   btnVideo.addEventListener("click", function(){ openScreen("note"); });
+  document.getElementById("btnStory").addEventListener("click", function(){ openScreen("story"); });
   document.getElementById("btnSong").addEventListener("click", function(){ openScreen("song"); });
   document.getElementById("btnClose").addEventListener("click", closeScreen);
   document.getElementById("btnReplay").addEventListener("click", replayFilm);
@@ -3636,7 +3657,7 @@
     saveTimer = setTimeout(function(){
       try{
         var done = [];
-        ["btnSong","btnVideo","btnReveal","btnClick","btnPiano","btnDraw","btnPlay"]
+        ["btnSong","btnVideo","btnStory","btnReveal","btnClick","btnPiano","btnDraw","btnPlay"]
           .forEach(function(id){
             var b = document.getElementById(id);
             if(b && b.classList.contains("done")){ done.push(id); }
